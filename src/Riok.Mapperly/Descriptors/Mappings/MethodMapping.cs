@@ -36,6 +36,8 @@ public abstract class MethodMapping : ITypeMapping
 
     private string? _methodName;
 
+    public string? GetMethodName() => _methodName;
+
     protected MethodMapping(ITypeSymbol sourceType, ITypeSymbol targetType)
     {
         TargetType = targetType;

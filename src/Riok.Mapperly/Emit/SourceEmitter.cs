@@ -1,6 +1,9 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Riok.Mapperly.Descriptors;
+using Riok.Mapperly.Descriptors.Mappings;
+using Riok.Mapperly.Descriptors.Mappings.UserMappings;
 using Riok.Mapperly.Emit.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static Riok.Mapperly.Emit.Syntax.SyntaxFactoryHelper;
@@ -34,6 +37,45 @@ public static class SourceEmitter
             );
     }
 
+    static PropertyDeclarationSyntax CreateProjectionProperty(
+        ITypeSymbol sourceType,
+        ITypeSymbol targetType,
+        string propertyName,
+        SimpleLambdaExpressionSyntax myLambda
+    )
+    {
+        var funcType = GenericName(Identifier("global::System.Linq.Expressions.Expression"))
+            .WithTypeArgumentList(
+                TypeArgumentList(
+                    SingletonSeparatedList<TypeSyntax>(
+                        GenericName(Identifier("global::System.Func"))
+                            .WithTypeArgumentList(
+                                TypeArgumentList(
+                                    SeparatedList<TypeSyntax>(
+                                        new SyntaxNodeOrToken[]
+                                        {
+                                            ParseTypeName("global::" + sourceType.ToDisplayString()), // T
+                                            Token(SyntaxKind.CommaToken),
+                                            ParseTypeName("global::" + targetType.ToDisplayString()), // TResult
+                                        }
+                                    )
+                                )
+                            )
+                    )
+                )
+            );
+
+        var property = PropertyDeclaration(funcType, Identifier(propertyName))
+            .AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword))
+            .WithExpressionBody(ArrowExpressionClause(myLambda))
+            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
+            .NormalizeWhitespace()
+            .WithLeadingTrivia(ElasticCarriageReturnLineFeed, Nullable(false), ElasticCarriageReturnLineFeed)
+            .WithTrailingTrivia(ElasticCarriageReturnLineFeed, Nullable(true), ElasticCarriageReturnLineFeed);
+
+        return property;
+    }
+
     private static MemberDeclarationSyntax BuildMapper(
         SourceEmitterContext ctx,
         MapperDescriptor descriptor,
@@ -43,6 +85,24 @@ public static class SourceEmitter
         ctx = IndentForMapper(ctx, descriptor.Symbol);
         var memberCtx = ctx.AddIndentation();
         var members = BuildMembers(memberCtx, descriptor, cancellationToken);
+
+        if (descriptor.MethodMappings.First() is UserDefinedNewInstanceMethodMapping userDefinedNewInstanceMethodMapping)
+        {
+            if (userDefinedNewInstanceMethodMapping.DelegateMethodMapping is QueryableProjectionMapping queryableProjectionMapping)
+            {
+                List(members);
+                var source = (queryableProjectionMapping.SourceType as INamedTypeSymbol)!.TypeArguments[0];
+                var target = (queryableProjectionMapping.TargetType as INamedTypeSymbol)!.TypeArguments[0];
+                var p = CreateProjectionProperty(
+                    source,
+                    target,
+                    userDefinedNewInstanceMethodMapping.GetMethodName() + "Expression",
+                    queryableProjectionMapping.LambdaExpressionSyntax!
+                );
+                members = members.Append(p);
+            }
+        }
+
         members = members.SeparateByLineFeed(memberCtx.SyntaxFactory.Indentation);
         MemberDeclarationSyntax mapperDeclaration = ctx.SyntaxFactory.Class(
             descriptor.Symbol.Name,

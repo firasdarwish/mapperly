@@ -22,7 +22,7 @@ public class UserDefinedNewInstanceMethodMapping(
 
     public new IMethodSymbol Method { get; } = method;
 
-    private MethodMapping? DelegateMethodMapping => _delegateMapping as MethodMapping;
+    public MethodMapping? DelegateMethodMapping => _delegateMapping as MethodMapping;
 
     public bool? Default { get; } = isDefault;
 

@@ -18,6 +18,7 @@ public class QueryableProjectionMapping(
 {
     private const string QueryableReceiverName = "global::System.Linq.Queryable";
     private const string SelectMethodName = nameof(Queryable.Select);
+    public SimpleLambdaExpressionSyntax? LambdaExpressionSyntax { get; protected set; }
 
     public override IEnumerable<StatementSyntax> BuildBody(TypeMappingBuildContext ctx)
     {
@@ -29,6 +30,7 @@ public class QueryableProjectionMapping(
 
         var delegateMappingSyntax = delegateMapping.Build(lambdaCtx);
         var projectionLambda = Lambda(lambdaSourceName, delegateMappingSyntax);
+        LambdaExpressionSyntax = projectionLambda;
         var select = ctx.SyntaxFactory.StaticInvocation(QueryableReceiverName, SelectMethodName, ctx.Source, projectionLambda);
         var returnStatement = ctx.SyntaxFactory.Return(select);
         var leadingTrivia = returnStatement.GetLeadingTrivia().Insert(0, ElasticCarriageReturnLineFeed).Insert(1, Nullable(false));
